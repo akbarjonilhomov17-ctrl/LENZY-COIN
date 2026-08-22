@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Crown, Medal, Search, Flame, Users, RefreshCw, Sparkles, Zap, ShieldCheck } from 'lucide-react';
+import { Trophy, Crown, Medal, Search, Flame, Users, RefreshCw, Sparkles, Zap, Coins, Trash2 } from 'lucide-react';
 import { LeaderboardUser, UserGameState, LeaderboardCategory } from '../types';
-import { fetchOnlineLeaderboard } from '../services/userService';
+import { fetchOnlineLeaderboard, isAdminUser, adminDeleteUser, saveUserOnline } from '../services/userService';
 import { formatCoins, formatNumberWithCommas } from '../utils/storage';
 import { soundEffects } from '../utils/audio';
 
@@ -12,11 +12,14 @@ interface LeaderboardViewProps {
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   gameState
 }) => {
-  const [category, setCategory] = useState<LeaderboardCategory>('taps');
+  const [category, setCategory] = useState<LeaderboardCategory>('coins');
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  const isAdmin = isAdminUser(gameState.username);
 
   // Load online leaderboard from Firestore
   const loadLeaderboard = async (cat: LeaderboardCategory, showRefresh = false) => {
@@ -24,6 +27,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     else setLoading(true);
 
     try {
+      // Sync latest local state to Firestore before fetching
+      await saveUserOnline(gameState);
       const data = await fetchOnlineLeaderboard(cat, gameState);
       setUsers(data);
     } catch (err) {
@@ -36,12 +41,32 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
   useEffect(() => {
     loadLeaderboard(category);
-  }, [category, gameState.totalTapsCount, gameState.referralCount, gameState.coins]);
+  }, [category, gameState.totalEarnedCoins, gameState.totalTapsCount, gameState.referralCount]);
 
   const handleTabChange = (newCat: LeaderboardCategory) => {
     if (category === newCat) return;
     setCategory(newCat);
     soundEffects.playTap(gameState.soundEnabled);
+  };
+
+  const handleDeleteUser = async (userToDelete: LeaderboardUser, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+
+    if (!window.confirm(`Rostdan ham "${userToDelete.name}" (${userToDelete.username}) ni reyting va bazadan butunlay o'chirmoqchimisiz?`)) {
+      return;
+    }
+
+    setDeletingUserId(userToDelete.id);
+    try {
+      await adminDeleteUser(userToDelete.id);
+      soundEffects.playTap(gameState.soundEnabled);
+      await loadLeaderboard(category, true);
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   // Filtered by search query
@@ -69,6 +94,31 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     isCurrentUser: true
   };
 
+  const renderMetric = (u: { totalEarnedCoins: number; coins: number; totalTapsCount: number; referralCount: number }) => {
+    if (category === 'coins') {
+      return (
+        <span className="text-amber-400 font-extrabold flex items-center justify-center gap-1">
+          <Coins className="w-3 h-3 text-yellow-400 inline shrink-0" />
+          {formatCoins(u.totalEarnedCoins || u.coins)}
+        </span>
+      );
+    }
+    if (category === 'taps') {
+      return (
+        <span className="text-amber-300 font-extrabold flex items-center justify-center gap-0.5">
+          <Zap className="w-3 h-3 text-amber-400 inline shrink-0" />
+          {formatNumberWithCommas(u.totalTapsCount)} tap
+        </span>
+      );
+    }
+    return (
+      <span className="text-sky-300 font-extrabold flex items-center justify-center gap-0.5">
+        <Users className="w-3 h-3 text-sky-400 inline shrink-0" />
+        {u.referralCount} do&apos;st
+      </span>
+    );
+  };
+
   return (
     <div className="flex-1 w-full max-w-md mx-auto px-4 pb-28 pt-2 overflow-y-auto space-y-4 select-none">
       {/* 1. Header with Trophy */}
@@ -82,30 +132,42 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         </p>
       </div>
 
-      {/* 2. Category Switcher Tabs (Eng ko'p tap VS Eng ko'p do'st taklif qilgan) */}
-      <div className="grid grid-cols-2 gap-2 bg-slate-900/90 p-1 rounded-2xl border border-slate-800">
+      {/* 2. Category Switcher 3 Tabs: Tangalar, Bosishlar, Do'stlar */}
+      <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800">
+        <button
+          onClick={() => handleTabChange('coins')}
+          className={`py-2 px-1.5 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${
+            category === 'coins'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Coins className="w-3.5 h-3.5" />
+          <span>Tangalar</span>
+        </button>
+
         <button
           onClick={() => handleTabChange('taps')}
-          className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 px-1.5 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${
             category === 'taps'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md shadow-amber-500/20 scale-[1.02]'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Zap className="w-4 h-4" />
-          <span>Eng ko&apos;p tap</span>
+          <Zap className="w-3.5 h-3.5" />
+          <span>Bosishlar</span>
         </button>
 
         <button
           onClick={() => handleTabChange('referrals')}
-          className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 px-1.5 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${
             category === 'referrals'
               ? 'bg-gradient-to-r from-blue-500 to-sky-400 text-slate-950 shadow-md shadow-blue-500/20 scale-[1.02]'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>Eng ko&apos;p taklif</span>
+          <Users className="w-3.5 h-3.5" />
+          <span>Do&apos;stlar</span>
         </button>
       </div>
 
@@ -145,7 +207,17 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             <div className="grid grid-cols-3 gap-2 items-end pt-5 pb-2">
               {/* 2nd Place */}
               {second ? (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center relative group">
+                  {isAdmin && !second.isCurrentUser && (
+                    <button
+                      onClick={(e) => handleDeleteUser(second, e)}
+                      disabled={deletingUserId === second.id}
+                      title="O'chirish"
+                      className="absolute -top-2 -left-2 z-20 p-1 rounded-full bg-rose-600 text-white shadow-md hover:bg-rose-700 active:scale-95"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                   <div className="relative mb-1">
                     <div className="w-12 h-12 rounded-full p-0.5 border-2 border-slate-400 flex items-center justify-center shadow-lg bg-slate-800">
                       {second.photoUrl ? (
@@ -168,9 +240,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                   <span className="text-[11px] font-bold text-slate-200 truncate max-w-[90px] text-center mt-1">
                     {second.name}
                   </span>
-                  <span className={`text-[10px] font-extrabold ${category === 'taps' ? 'text-amber-300' : 'text-sky-300'}`}>
-                    {category === 'taps' ? `${formatNumberWithCommas(second.totalTapsCount)} tap` : `${second.referralCount} do'st`}
-                  </span>
+                  <div className="text-[10px] text-center mt-0.5">
+                    {renderMetric(second)}
+                  </div>
                   <div className="w-full h-16 bg-gradient-to-t from-slate-800 to-slate-700/60 rounded-t-xl mt-2 border-t-2 border-slate-400 flex items-center justify-center">
                     <Medal className="w-5 h-5 text-slate-300" />
                   </div>
@@ -181,7 +253,17 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
               {/* 1st Place */}
               {first && (
-                <div className="flex flex-col items-center -mt-4">
+                <div className="flex flex-col items-center -mt-4 relative group">
+                  {isAdmin && !first.isCurrentUser && (
+                    <button
+                      onClick={(e) => handleDeleteUser(first, e)}
+                      disabled={deletingUserId === first.id}
+                      title="O'chirish"
+                      className="absolute -top-2 -left-2 z-20 p-1 rounded-full bg-rose-600 text-white shadow-md hover:bg-rose-700 active:scale-95"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                   <div className="relative mb-1">
                     <div className="absolute -top-5 left-1/2 -translate-x-1/2">
                       <Crown className="w-6 h-6 text-yellow-400 animate-bounce" />
@@ -207,9 +289,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                   <span className="text-xs font-extrabold text-amber-300 truncate max-w-[100px] text-center mt-1">
                     {first.name}
                   </span>
-                  <span className={`text-[11px] font-extrabold ${category === 'taps' ? 'text-yellow-400' : 'text-sky-300'}`}>
-                    {category === 'taps' ? `${formatNumberWithCommas(first.totalTapsCount)} tap` : `${first.referralCount} do'st`}
-                  </span>
+                  <div className="text-[11px] text-center mt-0.5">
+                    {renderMetric(first)}
+                  </div>
                   <div className="w-full h-22 bg-gradient-to-t from-amber-900/80 via-yellow-700/60 to-yellow-600/60 rounded-t-xl mt-2 border-t-2 border-yellow-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
                     <Trophy className="w-6 h-6 text-yellow-300" />
                   </div>
@@ -218,7 +300,17 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
               {/* 3rd Place */}
               {third ? (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center relative group">
+                  {isAdmin && !third.isCurrentUser && (
+                    <button
+                      onClick={(e) => handleDeleteUser(third, e)}
+                      disabled={deletingUserId === third.id}
+                      title="O'chirish"
+                      className="absolute -top-2 -left-2 z-20 p-1 rounded-full bg-rose-600 text-white shadow-md hover:bg-rose-700 active:scale-95"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                   <div className="relative mb-1">
                     <div className="w-12 h-12 rounded-full p-0.5 border-2 border-amber-600 flex items-center justify-center shadow-lg bg-slate-800">
                       {third.photoUrl ? (
@@ -241,9 +333,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                   <span className="text-[11px] font-bold text-slate-200 truncate max-w-[90px] text-center mt-1">
                     {third.name}
                   </span>
-                  <span className={`text-[10px] font-extrabold ${category === 'taps' ? 'text-amber-300' : 'text-sky-300'}`}>
-                    {category === 'taps' ? `${formatNumberWithCommas(third.totalTapsCount)} tap` : `${third.referralCount} do'st`}
-                  </span>
+                  <div className="text-[10px] text-center mt-0.5">
+                    {renderMetric(third)}
+                  </div>
                   <div className="w-full h-12 bg-gradient-to-t from-amber-950 to-amber-900/60 rounded-t-xl mt-2 border-t-2 border-amber-600 flex items-center justify-center">
                     <Medal className="w-4 h-4 text-amber-500" />
                   </div>
@@ -316,22 +408,48 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Metric Score (Taps or Referrals) */}
-                  <div className="text-right shrink-0">
-                    {category === 'taps' ? (
-                      <>
-                        <span className="text-xs font-black text-amber-300 block">
-                          {formatNumberWithCommas(user.totalTapsCount)}
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-semibold">bosishlar</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs font-black text-sky-300 block">
-                          {user.referralCount} ta
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-semibold">do&apos;st</span>
-                      </>
+                  {/* Metric Score (Coins, Taps, or Referrals) + Admin Delete Button */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      {category === 'coins' ? (
+                        <>
+                          <span className="text-xs font-black text-amber-300 flex items-center justify-end gap-1">
+                            <Coins className="w-3 h-3 text-yellow-400 inline" />
+                            {formatCoins(user.totalEarnedCoins || user.coins)}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-semibold">tanga</span>
+                        </>
+                      ) : category === 'taps' ? (
+                        <>
+                          <span className="text-xs font-black text-amber-300 block">
+                            {formatNumberWithCommas(user.totalTapsCount)}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-semibold">bosishlar</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs font-black text-sky-300 block">
+                            {user.referralCount} ta
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-semibold">do&apos;st</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Admin Direct Delete Button (only for other users) */}
+                    {isAdmin && !user.isCurrentUser && (
+                      <button
+                        onClick={(e) => handleDeleteUser(user, e)}
+                        disabled={deletingUserId === user.id}
+                        title="O'yinchini bazadan o'chirish (Admin)"
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                      >
+                        {deletingUserId === user.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -359,7 +477,15 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
           </div>
 
           <div className="text-right">
-            {category === 'taps' ? (
+            {category === 'coins' ? (
+              <>
+                <span className="text-xs font-extrabold text-amber-300 flex items-center justify-end gap-1">
+                  <Coins className="w-3 h-3 text-yellow-400 inline" />
+                  {formatCoins(gameState.totalEarnedCoins || gameState.coins)}
+                </span>
+                <span className="text-[9px] text-slate-400 font-medium">Sizning tangalaringiz</span>
+              </>
+            ) : category === 'taps' ? (
               <>
                 <span className="text-xs font-extrabold text-amber-300 block">
                   {formatNumberWithCommas(gameState.totalTapsCount)} tap

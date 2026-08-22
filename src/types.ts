@@ -78,7 +78,7 @@ export interface FloatingText {
   isCrit?: boolean;
 }
 
-export type LeaderboardCategory = 'taps' | 'referrals';
+export type LeaderboardCategory = 'coins' | 'taps' | 'referrals';
 
 export interface LeaderboardUser {
   id: string;

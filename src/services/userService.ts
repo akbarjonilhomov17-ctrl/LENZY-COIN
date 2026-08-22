@@ -481,8 +481,14 @@ export async function fetchOnlineLeaderboard(
   try {
     const usersCol = collection(db, 'users');
     
-    // Sort by totalTapsCount or referralCount
-    const sortField = category === 'taps' ? 'totalTapsCount' : 'referralCount';
+    // Sort by totalEarnedCoins, totalTapsCount, or referralCount
+    let sortField = 'totalTapsCount';
+    if (category === 'coins') {
+      sortField = 'totalEarnedCoins';
+    } else if (category === 'referrals') {
+      sortField = 'referralCount';
+    }
+    
     const q = query(usersCol, orderBy(sortField, 'desc'), limit(100));
     
     const snap = await getDocs(q);
@@ -501,12 +507,12 @@ export async function fetchOnlineLeaderboard(
         rank: 0, // Assigned after sorting
         name: isCurrentUser ? `${displayName} (Siz)` : displayName,
         username: d.username ? `@${d.username}` : `@user_${docSnap.id.slice(-4)}`,
-        photoUrl: d.photoUrl || undefined,
+        photoUrl: isCurrentUser ? (currentUser.photoUrl || d.photoUrl) : d.photoUrl || undefined,
         avatarBg: d.avatarBg || getRandomAvatarBg(displayName),
-        totalTapsCount: d.totalTapsCount || 0,
-        totalEarnedCoins: d.totalEarnedCoins || 0,
-        coins: d.coins || 0,
-        referralCount: d.referralCount || 0,
+        totalTapsCount: isCurrentUser ? Math.max(currentUser.totalTapsCount, d.totalTapsCount || 0) : (d.totalTapsCount || 0),
+        totalEarnedCoins: isCurrentUser ? Math.max(currentUser.totalEarnedCoins, d.totalEarnedCoins || 0) : (d.totalEarnedCoins || 0),
+        coins: isCurrentUser ? currentUser.coins : (d.coins || 0),
+        referralCount: isCurrentUser ? Math.max(currentUser.referralCount, d.referralCount || 0) : (d.referralCount || 0),
         isCurrentUser
       });
     });
@@ -534,10 +540,12 @@ export async function fetchOnlineLeaderboard(
     }
 
     // Sort descending by selected category
-    if (category === 'taps') {
-      users.sort((a, b) => b.totalTapsCount - a.totalTapsCount || b.coins - a.coins);
+    if (category === 'coins') {
+      users.sort((a, b) => b.totalEarnedCoins - a.totalEarnedCoins || b.coins - a.coins || b.totalTapsCount - a.totalTapsCount);
+    } else if (category === 'taps') {
+      users.sort((a, b) => b.totalTapsCount - a.totalTapsCount || b.totalEarnedCoins - a.totalEarnedCoins);
     } else {
-      users.sort((a, b) => b.referralCount - a.referralCount || b.coins - a.coins);
+      users.sort((a, b) => b.referralCount - a.referralCount || b.totalEarnedCoins - a.totalEarnedCoins);
     }
 
     // Assign 1-indexed ranks

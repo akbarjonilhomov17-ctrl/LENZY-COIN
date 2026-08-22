@@ -45,14 +45,25 @@ export default function App() {
     latestStateRef.current = gameState;
   }, [gameState]);
 
-  // Debounced sync function to Firestore
+  // Debounced sync function to Firestore for taps and quick actions
   const queueOnlineSync = useCallback((state: UserGameState) => {
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current);
     }
     syncTimeoutRef.current = setTimeout(() => {
       saveUserOnline(state);
-    }, 1200);
+    }, 600);
+  }, []);
+
+  // Flush any pending sync immediately
+  const flushSync = useCallback(() => {
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = null;
+    }
+    if (latestStateRef.current?.userId) {
+      saveUserOnline(latestStateRef.current);
+    }
   }, []);
 
   // 1. Initial Online Load (Telegram + Firebase Firestore)
@@ -92,20 +103,28 @@ export default function App() {
     };
   }, []);
 
-  // 2. Real-time Energy Regeneration Loop (1 sec interval)
+  // 2. Real-time Energy Regeneration Loop (1 sec interval local, 15 sec periodic online sync)
   useEffect(() => {
-    const interval = setInterval(() => {
+    const energyInterval = setInterval(() => {
       setGameState((prev) => {
         if (prev.energy >= prev.maxEnergy) return prev;
         const newEnergy = Math.min(prev.maxEnergy, prev.energy + prev.energyRechargeRate);
-        const updated = { ...prev, energy: newEnergy };
-        queueOnlineSync(updated);
-        return updated;
+        return { ...prev, energy: newEnergy };
       });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [queueOnlineSync]);
+    // Periodic background sync every 15 seconds to keep energy / auto-bot updated in cloud
+    const periodicSync = setInterval(() => {
+      if (latestStateRef.current?.userId) {
+        saveUserOnline(latestStateRef.current);
+      }
+    }, 15000);
+
+    return () => {
+      clearInterval(energyInterval);
+      clearInterval(periodicSync);
+    };
+  }, []);
 
   // 3. Current League calculation
   const currentLeague = getCurrentLeague(gameState.totalEarnedCoins);
@@ -353,7 +372,10 @@ export default function App() {
         {/* Navigation Bar */}
         <Navigation
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={(tab) => {
+            flushSync();
+            setActiveTab(tab);
+          }}
           unclaimedTasksCount={unclaimedTasksCount}
           soundEnabled={gameState.soundEnabled}
           vibrationEnabled={gameState.vibrationEnabled}
