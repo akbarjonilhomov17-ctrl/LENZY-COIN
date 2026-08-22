@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const displayName = gameState.firstName 
     ? `${gameState.firstName}${gameState.lastName ? ' ' + gameState.lastName : ''}`
-    : (gameState.username || 'Lenzy Player');
+    : (gameState.username ? `@${gameState.username}` : 'Foydalanuvchi');
 
   return (
     <header className="w-full max-w-md mx-auto px-4 pt-3 pb-2 select-none relative z-20">

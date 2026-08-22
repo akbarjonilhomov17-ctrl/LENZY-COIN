@@ -21,7 +21,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   const isAdmin = isAdminUser(gameState.username);
   const league = getCurrentLeague(gameState.totalEarnedCoins || gameState.coins);
-  const displayName = `${gameState.firstName || ''} ${gameState.lastName || ''}`.trim() || 'Lenzy Player';
+  const displayName = `${gameState.firstName || ''} ${gameState.lastName || ''}`.trim() || (gameState.username ? `@${gameState.username}` : 'Foydalanuvchi');
   const cleanUsername = (gameState.username || 'user').replace(/^@/, '');
 
   return (

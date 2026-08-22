@@ -47,22 +47,133 @@ export function getRandomAvatarBg(name: string): string {
 }
 
 /**
- * Gets Telegram WebApp user if running inside Telegram Mini App
+ * Extracts Telegram WebApp user from all available sources:
+ * 1. window.Telegram.WebApp.initDataUnsafe.user
+ * 2. window.Telegram.WebApp.initData (URL decoded query string)
+ * 3. window.location.hash (#tgWebAppData=...)
+ * 4. window.location.search (?tgWebAppData=...)
+ * 5. Cached localStorage from previous Telegram session
  */
 export function getTelegramData(): { user?: TelegramUser; startParam?: string } {
   try {
-    if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
-      
-      const user = window.Telegram.WebApp.initDataUnsafe?.user;
-      const startParam = window.Telegram.WebApp.initDataUnsafe?.start_param;
-      return { user, startParam };
+    if (typeof window === 'undefined') return {};
+
+    let user: TelegramUser | undefined;
+    let startParam: string | undefined;
+
+    // 1. Direct Telegram WebApp SDK
+    if (window.Telegram?.WebApp) {
+      try {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+      } catch (e) {
+        console.warn('Telegram WebApp ready/expand error:', e);
+      }
+
+      // Check initDataUnsafe
+      const unsafeUser = window.Telegram.WebApp.initDataUnsafe?.user;
+      if (unsafeUser && unsafeUser.id) {
+        user = unsafeUser;
+      }
+      if (window.Telegram.WebApp.initDataUnsafe?.start_param) {
+        startParam = window.Telegram.WebApp.initDataUnsafe.start_param;
+      }
+
+      // If user not in initDataUnsafe, parse raw initData string
+      if (!user && window.Telegram.WebApp.initData) {
+        try {
+          const params = new URLSearchParams(window.Telegram.WebApp.initData);
+          const userStr = params.get('user');
+          if (userStr) {
+            user = JSON.parse(decodeURIComponent(userStr));
+          }
+          if (!startParam) {
+            startParam = params.get('start_param') || undefined;
+          }
+        } catch (err) {
+          console.warn('Error parsing initData string:', err);
+        }
+      }
     }
+
+    // 2. Check URL Hash (used by Telegram Web and Desktop: #tgWebAppData=...)
+    if (!user && window.location.hash) {
+      try {
+        const hash = window.location.hash.substring(1);
+        const hashParams = new URLSearchParams(hash);
+        const tgData = hashParams.get('tgWebAppData');
+        if (tgData) {
+          const subParams = new URLSearchParams(tgData);
+          const userStr = subParams.get('user');
+          if (userStr) {
+            user = JSON.parse(decodeURIComponent(userStr));
+          }
+          if (!startParam) {
+            startParam = subParams.get('start_param') || undefined;
+          }
+        } else {
+          const userStr = hashParams.get('user');
+          if (userStr) {
+            user = JSON.parse(decodeURIComponent(userStr));
+          }
+        }
+      } catch (err) {
+        console.warn('Error parsing URL hash for Telegram user:', err);
+      }
+    }
+
+    // 3. Check URL Search Query (e.g. ?tgWebAppData=... or ?user=...)
+    if (!user && window.location.search) {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const tgData = searchParams.get('tgWebAppData');
+        if (tgData) {
+          const subParams = new URLSearchParams(tgData);
+          const userStr = subParams.get('user');
+          if (userStr) {
+            user = JSON.parse(decodeURIComponent(userStr));
+          }
+          if (!startParam) {
+            startParam = subParams.get('start_param') || undefined;
+          }
+        } else {
+          const userStr = searchParams.get('user');
+          if (userStr) {
+            user = JSON.parse(decodeURIComponent(userStr));
+          }
+        }
+      } catch (err) {
+        console.warn('Error parsing URL search for Telegram user:', err);
+      }
+    }
+
+    // 4. Cache valid Telegram user to localStorage
+    if (user && user.id) {
+      localStorage.setItem('lenzy_tg_id', String(user.id));
+      if (user.first_name) localStorage.setItem('lenzy_tg_first_name', user.first_name);
+      if (user.last_name) localStorage.setItem('lenzy_tg_last_name', user.last_name);
+      if (user.username) localStorage.setItem('lenzy_tg_username', user.username);
+      if (user.photo_url) localStorage.setItem('lenzy_tg_photo', user.photo_url);
+    } else {
+      // 5. Fallback from localStorage if previously stored
+      const cachedId = localStorage.getItem('lenzy_tg_id');
+      const cachedFirst = localStorage.getItem('lenzy_tg_first_name');
+      if (cachedId && cachedFirst) {
+        user = {
+          id: parseInt(cachedId, 10) || 0,
+          first_name: cachedFirst,
+          last_name: localStorage.getItem('lenzy_tg_last_name') || undefined,
+          username: localStorage.getItem('lenzy_tg_username') || undefined,
+          photo_url: localStorage.getItem('lenzy_tg_photo') || undefined,
+        };
+      }
+    }
+
+    return { user, startParam };
   } catch (e) {
-    console.warn('Telegram WebApp not detected or error accessing:', e);
+    console.warn('Telegram data extraction error:', e);
+    return {};
   }
-  return {};
 }
 
 /**
@@ -107,9 +218,9 @@ export function getOrCreateUserId(tgUser?: TelegramUser): string {
 export const DEFAULT_USER_STATE: UserGameState = {
   userId: '',
   telegramId: '',
-  username: 'LenzyPlayer',
-  firstName: 'Lenzy',
-  lastName: 'Player',
+  username: 'player',
+  firstName: 'Player',
+  lastName: '',
   photoUrl: undefined,
   avatarBg: 'bg-amber-600',
   referredBy: null,
@@ -154,15 +265,20 @@ export async function initializeUserOnline(): Promise<{ state: UserGameState; of
 
   const userDocRef = doc(db, 'users', userId);
 
+  const tgUsername = tgUser?.username || (tgUser?.first_name ? tgUser.first_name.toLowerCase().replace(/[^a-z0-9_]/g, '') : undefined);
+  const tgFirst = tgUser?.first_name;
+  const tgLast = tgUser?.last_name || '';
+  const tgPhoto = tgUser?.photo_url;
+
   let loadedState: UserGameState = {
     ...DEFAULT_USER_STATE,
     userId,
     telegramId: tgUser?.id ? String(tgUser.id) : (localStorage.getItem('lenzy_tg_id') || String(Date.now()).slice(-6)),
-    username: tgUser?.username || localStorage.getItem('lenzy_tg_username') || 'LenzyUser',
-    firstName: tgUser?.first_name || localStorage.getItem('lenzy_tg_first_name') || 'Lenzy',
-    lastName: tgUser?.last_name || localStorage.getItem('lenzy_tg_last_name') || '',
-    photoUrl: tgUser?.photo_url || localStorage.getItem('lenzy_tg_photo') || undefined,
-    avatarBg: getRandomAvatarBg(tgUser?.first_name || 'LenzyUser'),
+    username: tgUsername || localStorage.getItem('lenzy_tg_username') || `user_${userId.slice(-5)}`,
+    firstName: tgFirst || localStorage.getItem('lenzy_tg_first_name') || 'Player',
+    lastName: tgLast || localStorage.getItem('lenzy_tg_last_name') || '',
+    photoUrl: tgPhoto || localStorage.getItem('lenzy_tg_photo') || undefined,
+    avatarBg: getRandomAvatarBg(tgFirst || tgUsername || userId),
   };
 
   let offlineCoins = 0;
@@ -174,17 +290,22 @@ export async function initializeUserOnline(): Promise<{ state: UserGameState; of
     if (snap.exists()) {
       const data = snap.data();
       
-      // Update with latest Telegram details if present
+      // Update with latest real Telegram details if present
+      const finalUsername = tgUsername || (data.username && data.username !== 'LenzyUser' && data.username !== 'LenzyPlayer' ? data.username : `user_${userId.slice(-5)}`);
+      const finalFirstName = tgFirst || (data.firstName && data.firstName !== 'Lenzy' ? data.firstName : 'Player');
+      const finalLastName = tgLast !== '' ? tgLast : (data.lastName ?? '');
+      const finalPhoto = tgPhoto || data.photoUrl || undefined;
+
       loadedState = {
         ...DEFAULT_USER_STATE,
         ...data,
         userId,
         telegramId: tgUser?.id ? String(tgUser.id) : (data.telegramId || loadedState.telegramId),
-        username: tgUser?.username || data.username || loadedState.username,
-        firstName: tgUser?.first_name || data.firstName || loadedState.firstName,
-        lastName: tgUser?.last_name ?? data.lastName ?? loadedState.lastName,
-        photoUrl: tgUser?.photo_url || data.photoUrl || loadedState.photoUrl,
-        avatarBg: data.avatarBg || getRandomAvatarBg(tgUser?.first_name || data.username || 'User'),
+        username: finalUsername,
+        firstName: finalFirstName,
+        lastName: finalLastName,
+        photoUrl: finalPhoto,
+        avatarBg: data.avatarBg || getRandomAvatarBg(finalFirstName || finalUsername || 'User'),
         referralCount: data.referralCount ?? 0,
         referredBy: data.referredBy ?? null,
       };
@@ -204,13 +325,15 @@ export async function initializeUserOnline(): Promise<{ state: UserGameState; of
         }
       }
 
-      // Update active timestamp
+      // Update active timestamp and latest Telegram profile
       await updateDoc(userDocRef, {
         lastActiveTimestamp: Date.now(),
         firstName: loadedState.firstName,
         lastName: loadedState.lastName,
         username: loadedState.username,
         photoUrl: loadedState.photoUrl || null,
+        avatarBg: loadedState.avatarBg,
+        telegramId: loadedState.telegramId,
         coins: loadedState.coins,
         totalEarnedCoins: loadedState.totalEarnedCoins
       });
