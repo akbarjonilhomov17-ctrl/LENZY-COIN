@@ -1,0 +1,6 @@
+{
+  "name": "Lenzy Coin",
+  "description": "Lenzy Coin — Telegram tap-to-earn o'yini: haqiqiy Telegram profil va avatarlar, Firebase onlayn ma'lumotlar bazasi, Top Tap va Top Takliflar jonli reytingi hamda referal tizimi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
