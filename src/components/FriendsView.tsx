@@ -30,10 +30,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
 
   // Base Game URL
   const getBaseGameUrl = () => {
-    if (typeof window === 'undefined') return '';
-    const origin = window.location.origin;
-    const pathname = window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
-    return `${origin}${pathname}`;
+    return 'https://lenzycoin.vercel.app';
   };
   const baseGameUrl = getBaseGameUrl();
 
@@ -110,8 +107,8 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
 
   const handleSaveBotUsername = () => {
     const bClean = customBotInput.replace(/^@/, '').trim();
-    setBotUsername(bClean || 'LenzyCoinBot');
-    localStorage.setItem('lenzy_custom_bot_username', bClean || 'LenzyCoinBot');
+    setBotUsername(bClean || 'lenzycoin_bot');
+    localStorage.setItem('lenzy_custom_bot_username', bClean || 'lenzycoin_bot');
     setIsEditingBot(false);
   };
 

@@ -14,7 +14,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const BOT_TOKEN = process.env.BOT_TOKEN || '8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY';
 
 // O'YIN HAVOLASI:
-const GAME_URL = process.env.GAME_URL || 'https://ais-pre-owanp3lrdlklvx2gqvtafo-787186879028.asia-southeast1.run.app';
+const GAME_URL = process.env.GAME_URL || 'https://lenzycoin.vercel.app';
 
 // BANNER RASMI:
 const BANNER_URL = 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80';

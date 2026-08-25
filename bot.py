@@ -15,7 +15,7 @@ from telebot import types
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY")
 GAME_URL = os.environ.get(
     "GAME_URL", 
-    "https://ais-pre-owanp3lrdlklvx2gqvtafo-787186879028.asia-southeast1.run.app"
+    "https://lenzycoin.vercel.app"
 )
 BANNER_URL = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80"
 
