@@ -177,21 +177,106 @@ export function getTelegramData(): { user?: TelegramUser; startParam?: string } 
 }
 
 /**
- * Extracts referral code from URL query (?ref=...) or Telegram start_param
+ * Extracts referral code from all possible sources:
+ * - Telegram start_param (e.g. ref_12345 or tg_12345)
+ * - URL query parameters (?ref=..., ?startapp=..., ?tgWebAppStartParam=..., ?start=...)
+ * - URL hash parameters
+ * - Cached pending referral in localStorage
  */
 export function getReferralCode(): string | null {
-  const { startParam } = getTelegramData();
-  if (startParam) {
-    if (startParam.startsWith('ref_')) {
-      return startParam.replace('ref_', '');
+  try {
+    // 1. Direct Telegram WebApp start_param
+    const { startParam } = getTelegramData();
+    if (startParam) {
+      const clean = startParam.startsWith('ref_') ? startParam.replace('ref_', '') : startParam;
+      if (clean) {
+        localStorage.setItem('lenzy_pending_ref', clean);
+        return clean;
+      }
     }
-    return startParam;
+
+    if (typeof window !== 'undefined') {
+      // 2. URL Search params
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryRef = urlParams.get('ref') || 
+                       urlParams.get('startapp') || 
+                       urlParams.get('tgWebAppStartParam') || 
+                       urlParams.get('start') ||
+                       urlParams.get('invite');
+      if (queryRef) {
+        const clean = queryRef.startsWith('ref_') ? queryRef.replace('ref_', '') : queryRef;
+        if (clean) {
+          localStorage.setItem('lenzy_pending_ref', clean);
+          return clean;
+        }
+      }
+
+      // 3. URL Hash params
+      if (window.location.hash) {
+        const hash = window.location.hash.substring(1);
+        const hashParams = new URLSearchParams(hash);
+        const hashRef = hashParams.get('ref') || hashParams.get('start_param') || hashParams.get('startapp');
+        if (hashRef) {
+          const clean = hashRef.startsWith('ref_') ? hashRef.replace('ref_', '') : hashRef;
+          if (clean) {
+            localStorage.setItem('lenzy_pending_ref', clean);
+            return clean;
+          }
+        }
+      }
+    }
+
+    // 4. Stored pending referral
+    const storedRef = localStorage.getItem('lenzy_pending_ref');
+    if (storedRef) return storedRef;
+  } catch (e) {
+    console.warn('Error extracting referral code:', e);
   }
 
-  if (typeof window !== 'undefined') {
-    const urlParams = new URLSearchParams(window.location.search);
-    const ref = urlParams.get('ref');
-    if (ref) return ref;
+  return null;
+}
+
+/**
+ * Resolves raw referral code to the actual referrer Firestore document ID
+ */
+export async function resolveReferrer(rawCode: string): Promise<{ docId: string; data: Record<string, any> } | null> {
+  if (!rawCode) return null;
+  const clean = rawCode.replace(/^ref_/, '').trim();
+  if (!clean) return null;
+
+  try {
+    // 1. Direct document lookup by doc ID
+    const directRef = doc(db, 'users', clean);
+    const directSnap = await getDoc(directRef);
+    if (directSnap.exists()) {
+      return { docId: directSnap.id, data: directSnap.data() };
+    }
+
+    // 2. If numeric, check tg_ prefix
+    if (/^\d+$/.test(clean)) {
+      const tgRef = doc(db, 'users', `tg_${clean}`);
+      const tgSnap = await getDoc(tgRef);
+      if (tgSnap.exists()) {
+        return { docId: tgSnap.id, data: tgSnap.data() };
+      }
+    }
+
+    // 3. Query by telegramId field
+    const qTg = query(collection(db, 'users'), where('telegramId', '==', clean), limit(1));
+    const snapTg = await getDocs(qTg);
+    if (!snapTg.empty) {
+      return { docId: snapTg.docs[0].id, data: snapTg.docs[0].data() };
+    }
+
+    // 4. Query by username field
+    const cleanUser = clean.replace(/^@/, '').toLowerCase();
+    const qUser = query(collection(db, 'users'), where('username', '==', cleanUser), limit(1));
+    const snapUser = await getDocs(qUser);
+    if (!snapUser.empty) {
+      return { docId: snapUser.docs[0].id, data: snapUser.docs[0].data() };
+    }
+  } catch (err) {
+    console.warn('Error resolving referrer in Firestore:', err);
   }
 
   return null;
@@ -254,6 +339,24 @@ export const DEFAULT_USER_STATE: UserGameState = {
   soundEnabled: true,
   vibrationEnabled: true
 };
+
+/**
+ * Helper to sanitize objects for Firestore (removes/converts undefined to null or omits)
+ */
+export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val === undefined) {
+      clean[key] = null;
+    } else if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+      clean[key] = sanitizeForFirestore(val);
+    } else {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
 
 /**
  * Initialize user from Firebase Firestore or create initial document
@@ -328,9 +431,9 @@ export async function initializeUserOnline(): Promise<{ state: UserGameState; of
       // Update active timestamp and latest Telegram profile
       await updateDoc(userDocRef, {
         lastActiveTimestamp: Date.now(),
-        firstName: loadedState.firstName,
-        lastName: loadedState.lastName,
-        username: loadedState.username,
+        firstName: loadedState.firstName || 'Player',
+        lastName: loadedState.lastName || '',
+        username: loadedState.username || `user_${userId.slice(-5)}`,
         photoUrl: loadedState.photoUrl || null,
         avatarBg: loadedState.avatarBg,
         telegramId: loadedState.telegramId,
@@ -346,18 +449,25 @@ export async function initializeUserOnline(): Promise<{ state: UserGameState; of
       // Handle referral bonus if valid referrer
       if (refCode && refCode !== userId) {
         try {
-          const referrerDocRef = doc(db, 'users', refCode);
-          const referrerSnap = await getDoc(referrerDocRef);
+          const referrer = await resolveReferrer(refCode);
 
-          if (referrerSnap.exists()) {
-            referredByVal = refCode;
+          if (referrer && referrer.docId !== userId) {
+            referredByVal = referrer.docId;
             welcomeBonus = 10000;
-            // Reward referrer with +1 referral count and +10,000 coins
+            
+            // Reward referrer with +1 referral count and +10,000 coins in Firestore
+            const referrerDocRef = doc(db, 'users', referrer.docId);
             await updateDoc(referrerDocRef, {
               referralCount: increment(1),
+              friendsCount: increment(1),
               coins: increment(10000),
               totalEarnedCoins: increment(10000)
             });
+
+            // Clear pending referral after successful link
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('lenzy_pending_ref');
+            }
           }
         } catch (err) {
           console.warn('Referral check error:', err);
@@ -368,12 +478,15 @@ export async function initializeUserOnline(): Promise<{ state: UserGameState; of
       loadedState.totalEarnedCoins += welcomeBonus;
       loadedState.referredBy = referredByVal;
 
-      await setDoc(userDocRef, {
+      const firestoreData = sanitizeForFirestore({
         ...loadedState,
+        photoUrl: loadedState.photoUrl || null,
         createdAt: Date.now(),
         lastActiveTimestamp: Date.now(),
         isOnline: true
       });
+
+      await setDoc(userDocRef, firestoreData);
     }
   } catch (error) {
     console.error('Firestore init error, using local fallback:', error);
