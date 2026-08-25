@@ -23,7 +23,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
   const [selectedBotLang, setSelectedBotLang] = useState<'python' | 'nodejs'>('python');
 
   const [botUsername, setBotUsername] = useState(() => {
-    return localStorage.getItem('lenzy_custom_bot_username') || 'LenzyCoinBot';
+    return localStorage.getItem('lenzy_custom_bot_username') || 'lenzycoin_bot';
   });
   const [isEditingBot, setIsEditingBot] = useState(false);
   const [customBotInput, setCustomBotInput] = useState(botUsername);
@@ -38,7 +38,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
   const baseGameUrl = getBaseGameUrl();
 
   // Clean bot username
-  const cleanBot = botUsername.replace(/^@/, '').trim() || 'LenzyCoinBot';
+  const cleanBot = botUsername.replace(/^@/, '').trim() || 'lenzycoin_bot';
 
   // Standard Telegram Bot Referral Link: https://t.me/BotUsername?start=ref_USERID
   const tgBotReferralLink = `https://t.me/${cleanBot}?start=ref_${gameState.userId}`;
@@ -117,6 +117,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
 
   const pythonBotCode = `# ==============================================================================
 # 🎮 LENZY COIN - TELEGRAM BOT SERVER (Python)
+# Bot: @lenzycoin_bot
 # O'rnatish: pip install pyTelegramBotAPI
 # Ishga tushirish: python bot.py
 # ==============================================================================
@@ -124,7 +125,7 @@ import os
 import telebot
 from telebot import types
 
-BOT_TOKEN = "BOT_TOKENINGIZNI_SHU_YERGA_YOZING"
+BOT_TOKEN = "8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY"
 GAME_URL = "${baseGameUrl}"
 BANNER_URL = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80"
 
@@ -174,7 +175,7 @@ def handle_start(message: types.Message):
 
     # 2-HOLAT: Oddiy /start bosilganda
     direct_game_url = f"{GAME_URL}?ref=tg_{user_id}"
-    bot_user = bot.get_me().username
+    bot_user = bot.get_me().username or "lenzycoin_bot"
     share_link = f"https://t.me/{bot_user}?start=ref_{user_id}"
     share_msg = f"🪙 Lenzy Coin o'yiniga qo'shiling va +10,000 tanga oling! 👇\\n{share_link}"
 
@@ -198,12 +199,13 @@ bot.infinity_polling()`;
 
   const nodeBotCode = `/**
  * 🎮 LENZY COIN - TELEGRAM BOT (Node.js)
+ * Bot: @lenzycoin_bot
  * O'rnatish: npm install node-telegram-bot-api
  * Ishga tushirish: node bot.js
  */
 const TelegramBot = require('node-telegram-bot-api');
 
-const BOT_TOKEN = 'BOT_TOKENINGIZNI_SHU_YERGA_YOZING';
+const BOT_TOKEN = '8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY';
 const GAME_URL = '${baseGameUrl}';
 const BANNER_URL = 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80';
 
@@ -225,11 +227,11 @@ bot.onText(/\\/start(?:\\s+(.+))?/, async (msg, match) => {
   const rawParam = match ? match[1] : null;
 
   const botInfo = await bot.getMe();
-  const botUsername = botInfo.username;
+  const botUsername = botInfo.username || 'lenzycoin_bot';
 
   // 1-HOLAT: Do'st havolasi orqali kirganda
   if (rawParam && rawParam.startsWith('ref_')) {
-    const refCode = rawParam.replace('ref_', '');
+    const refCode = rawParam.replace('ref_', '').trim();
     const refGameUrl = \`\${GAME_URL}?ref=\${refCode}\`;
 
     const text = \`👋 <b>Assalomu alaykum, \${firstName}!</b>\\n\\n\` +
@@ -270,7 +272,7 @@ bot.onText(/\\/start(?:\\s+(.+))?/, async (msg, match) => {
   bot.sendPhoto(chatId, BANNER_URL, { caption: text, parse_mode: 'HTML', reply_markup: keyboard });
 });
 
-console.log("🚀 Node.js Telegram Bot ishga tushdi...");`;
+console.log("🚀 Node.js Telegram Bot (@lenzycoin_bot) ishga tushdi...");`;
 
   const handleCopyPython = () => {
     if (navigator.clipboard) {

@@ -1,36 +1,30 @@
 import os
 import sys
 import logging
-from telebot import TeleBot, types
+import telebot
+from telebot import types
 
 # ==============================================================================
-# 🎮 LENZY COIN - TELEGRAM BOT SERVER
+# 🎮 LENZY COIN - TELEGRAM BOT SERVER (Python)
+# Bot: @lenzycoin_bot
 # ==============================================================================
 # O'rnatish: pip install pyTelegramBotAPI
 # Ishga tushirish: python bot.py
 # ==============================================================================
 
-# 1. BOT TOKENINGIZNI KIRITING (@BotFather bergan token):
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "BOT_TOKENINGIZNI_SHU_YERGA_YOZING")
-
-# 2. O'YININGIZ HAVOLASI (Cloud Run / Vercel / Netlify havolasi):
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY")
 GAME_URL = os.environ.get(
     "GAME_URL", 
     "https://ais-pre-owanp3lrdlklvx2gqvtafo-787186879028.asia-southeast1.run.app"
 )
-
-# 3. RASM YOKI BANNER HAVOLASI:
 BANNER_URL = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-if BOT_TOKEN == "BOT_TOKENINGIZNI_SHU_YERGA_YOZING":
-    print("\n⚠️ DIQQAT: BOT_TOKEN o'zgartirilmagan! @BotFather dan olgan tokeningizni bot.py fayliga qo'ying.\n")
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 
-bot = TeleBot(BOT_TOKEN, parse_mode="HTML")
-
-# Pastki doimiy menyu tugmasini (Menu Button) sozlash
+# Pastki doimiy WebApp menyu tugmasini (Menu Button) ulash
 try:
     bot.set_chat_menu_button(
         menu_button=types.MenuButtonWebApp(
@@ -39,51 +33,56 @@ try:
             web_app=types.WebAppInfo(url=GAME_URL)
         )
     )
-    print("✅ Telegram chat pastki menyusi (Menu Button) muvaffaqiyatli ulandi!")
+    print("✅ Telegram chat pastki menyusi (Menu Button) ulandi!")
 except Exception as e:
-    logger.warning(f"Menu Button sozlashda ogohlantirish: {e}")
+    logger.warning(f"Menu Button sozlash: {e}")
 
 
 @bot.message_handler(commands=['start'])
 def handle_start(message: types.Message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name or "Do'st"
-    username = f"@{message.from_user.username}" if message.from_user.username else first_name
-
-    # /start buyrug'i bilan kelgan referal kodni ajratib olish (masalan: /start ref_tg_12345)
+    
+    # Buyruq bilan kelgan referal kodni tekshirish (/start ref_12345 yoki /start 12345)
     command_args = message.text.split()
     ref_code = None
     if len(command_args) > 1:
         raw_ref = command_args[1].strip()
         ref_code = raw_ref.replace("ref_", "")
 
+    bot_username = "lenzycoin_bot"
+    try:
+        me = bot.get_me()
+        bot_username = me.username or "lenzycoin_bot"
+    except Exception:
+        pass
+
     # ==============================================================================
     # 1-HOLAT: Foydalanuvchi do'stining taklif havolasi (Referral Link) orqali kirdi
     # ==============================================================================
-    if ref_code:
-        # Referal parametri bilan ochiladigan o'yin havolasi
+    if ref_code and str(ref_code) != str(user_id) and f"tg_{user_id}" != str(ref_code):
         ref_game_url = f"{GAME_URL}?ref={ref_code}"
+        my_ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+        share_text = f"🪙 Lenzy Coin o'yiniga qo'shiling va +10,000 tanga oling! 👇\n{my_ref_link}"
 
         welcome_ref_text = (
             f"👋 <b>Assalomu alaykum, {first_name}!</b>\n\n"
-            f"🎁 <b>Siz do'stingiz taklifi bilan keldingiz!</b>\n\n"
-            f"🪙 <b>Lenzy Coin</b> — bu eng tez rivojlanayotgan Telegram kliker o'yini.\n\n"
+            f"🎁 <b>Siz do'stingiz taklifi orqali keldingiz!</b>\n\n"
+            f"🪙 <b>Lenzy Coin</b> — Telegramdagi eng qiziqarli va tezkor kliker o'yini.\n\n"
             f"⚡ <b>Siz uchun maxsus sovg'a:</b>\n"
-            f"Quyidagi tugmani bosib o'yinga kiring va <b>+10,000 tanga</b> start bonusiga ega bo'ling! Taklif qilgan do'stingizga ham <b>+10,000 tanga</b> beriladi.\n\n"
-            f"👇 <i>O'yinni boshlash uchun bosing:</i>"
+            f"Quyidagi tugmani bosib o'yinga kiring va <b>+10,000 tanga</b> start bonusiga ega bo'ling! Sizni taklif qilgan do'stingizga ham <b>+10,000 tanga</b> taqdim etiladi.\n\n"
+            f"👇 <i>O'yinni boshlash uchun quyidagi tugmani bosing:</i>"
         )
 
         keyboard = types.InlineKeyboardMarkup(row_width=1)
         
-        # 1-TUGMA: Referal bilan to'g'ridan-to'g'ri o'yinni ochish (Mini App)
+        # 1-TUGMA: Referal bilan to'g'ridan-to'g'ri o'yinni ochish
         play_btn = types.InlineKeyboardButton(
             text="🎮 O'yinga kirish va +10,000 tanga olish 🎁",
             web_app=types.WebAppInfo(url=ref_game_url)
         )
         
-        # 2-TUGMA: Do'stlarga ulashish tugmasi
-        my_ref_link = f"https://t.me/{bot.get_me().username}?start=ref_{user_id}"
-        share_text = f"🪙 Lenzy Coin o'yiniga qo'shiling va +10,000 tanga oling! 👇\n{my_ref_link}"
+        # 2-TUGMA: O'z do'stlariga ulashish
         share_btn = types.InlineKeyboardButton(
             text="👥 Do'stlarni taklif qilish",
             url=f"https://t.me/share/url?url={my_ref_link}&text={share_text}"
@@ -110,7 +109,9 @@ def handle_start(message: types.Message):
     # 2-HOLAT: Foydalanuvchi oddiy /start bosdi (hech qanday referalsiz)
     # ==============================================================================
     direct_game_url = f"{GAME_URL}?ref=tg_{user_id}"
-    
+    my_ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    share_text = f"🪙 Lenzy Coin o'yiniga qo'shiling va +10,000 tanga oling! 👇\n{my_ref_link}"
+
     welcome_text = (
         f"👋 <b>Assalomu alaykum, {first_name}!</b>\n\n"
         f"🪙 <b>Lenzy Coin</b> rasmiy o'yiniga xush kelibsiz!\n\n"
@@ -119,7 +120,7 @@ def handle_start(message: types.Message):
         f"• ⚡ Energiyani oshirish va Boostlar sotib olish\n"
         f"• 🤖 Avto-bot (Offline daromad) faollashtirish\n"
         f"• 🏆 Kunlik mukofotlar va Vazifalarni bajarish\n"
-        f"• 👥 Har bir taklif qilingan do'st uchun <b>+10,000 tanga</b> va 10% komissiya\n\n"
+        f"• 👥 Har bir taklif qilingan do'st uchun <b>+10,000 tanga</b> va 10% doimiy komissiya!\n\n"
         f"👇 <i>O'yinni boshlash uchun quyidagi tugmani bosing:</i>"
     )
 
@@ -132,9 +133,6 @@ def handle_start(message: types.Message):
     )
 
     # Do'stlarni taklif qilish tugmasi
-    bot_info = bot.get_me()
-    my_ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
-    share_text = f"🪙 Lenzy Coin o'yiniga qo'shiling va +10,000 tanga oling! 👇\n{my_ref_link}"
     share_btn = types.InlineKeyboardButton(
         text="👥 Do'stlarni taklif qilish",
         url=f"https://t.me/share/url?url={my_ref_link}&text={share_text}"
@@ -169,5 +167,5 @@ def handle_help(message: types.Message):
 
 
 if __name__ == "__main__":
-    print("🚀 Lenzy Coin Telegram Boti ishga tushdi...")
+    print(f"🚀 Lenzy Coin Telegram Boti (@lenzycoin_bot) muvaffaqiyatli ishga tushdi...")
     bot.infinity_polling(skip_pending=True)

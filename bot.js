@@ -1,6 +1,7 @@
 /**
  * ==============================================================================
  * 🎮 LENZY COIN - NODE.JS TELEGRAM BOT SERVER
+ * Bot: @lenzycoin_bot
  * ==============================================================================
  * O'rnatish: npm install node-telegram-bot-api
  * Ishga tushirish: node bot.js
@@ -9,29 +10,25 @@
 
 const TelegramBot = require('node-telegram-bot-api');
 
-// 1. BOT TOKENINGIZ (@BotFather bergan token):
-const BOT_TOKEN = process.env.BOT_TOKEN || 'BOT_TOKENINGIZNI_SHU_YERGA_YOZING';
+// BOT TOKEN:
+const BOT_TOKEN = process.env.BOT_TOKEN || '8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY';
 
-// 2. O'YIN HAVOLASI (Vercel / Cloud Run / Netlify):
+// O'YIN HAVOLASI:
 const GAME_URL = process.env.GAME_URL || 'https://ais-pre-owanp3lrdlklvx2gqvtafo-787186879028.asia-southeast1.run.app';
 
-// 3. BANNER RASMI:
+// BANNER RASMI:
 const BANNER_URL = 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80';
-
-if (BOT_TOKEN === 'BOT_TOKENINGIZNI_SHU_YERGA_YOZING') {
-  console.log('\n⚠️ DIQQAT: BOT_TOKEN kiritilmagan! @BotFather dan olgan tokenni bot.js ga qo\'ying.\n');
-}
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Pastki doimiy menyu tugmasini (Menu Button) sozlash
+// Pastki doimiy menyu tugmasini (Menu Button) ulash
 bot.setChatMenuButton({
   menu_button: {
     type: 'web_app',
     text: "🎮 Lenzy Coin O'ynash",
     web_app: { url: GAME_URL }
   }
-}).catch((err) => console.warn('Menu Button sozlashda ogohlantirish:', err.message));
+}).catch((err) => console.warn('Menu Button sozlash:', err.message));
 
 // /start buyrug'ini qabul qilish
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
@@ -40,17 +37,22 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
   const firstName = msg.from.first_name || "Do'st";
   const rawParam = match ? match[1] : null;
 
-  const botInfo = await bot.getMe();
-  const botUsername = botInfo.username;
+  let botUsername = 'lenzycoin_bot';
+  try {
+    const botInfo = await bot.getMe();
+    botUsername = botInfo.username || 'lenzycoin_bot';
+  } catch (e) {
+    // default
+  }
 
   // 1-HOLAT: Agar foydalanuvchi do'stining taklif havolasi orqali kirgan bo'lsa
   if (rawParam && rawParam.startsWith('ref_')) {
-    const refCode = rawParam.replace('ref_', '');
+    const refCode = rawParam.replace('ref_', '').trim();
     const refGameUrl = `${GAME_URL}?ref=${refCode}`;
 
     const welcomeRefText = `👋 <b>Assalomu alaykum, ${firstName}!</b>\n\n` +
-      `🎁 <b>Siz do'stingiz taklifi bilan keldingiz!</b>\n\n` +
-      `🪙 <b>Lenzy Coin</b> — bu eng qiziqarli Telegram kliker o'yini.\n\n` +
+      `🎁 <b>Siz do'stingiz taklifi orqali keldingiz!</b>\n\n` +
+      `🪙 <b>Lenzy Coin</b> — Telegramdagi eng qiziqarli va tezkor kliker o'yini.\n\n` +
       `⚡ <b>Siz uchun maxsus sovg'a:</b>\n` +
       `Quyidagi tugmani bosib o'yinga kiring va <b>+10,000 tanga</b> start bonusiga ega bo'ling! Taklif qilgan do'stingizga ham <b>+10,000 tanga</b> beriladi.\n\n` +
       `👇 <i>O'yinni boshlash uchun bosing:</i>`;
@@ -102,7 +104,7 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     `• ⚡ Energiyani oshirish va Boostlar sotib olish\n` +
     `• 🤖 Avto-bot (Offline daromad) faollashtirish\n` +
     `• 🏆 Kunlik mukofotlar va Vazifalarni bajarish\n` +
-    `• 👥 Har bir taklif qilingan do'st uchun <b>+10,000 tanga</b> va 10% komissiya\n\n` +
+    `• 👥 Har bir taklif qilingan do'st uchun <b>+10,000 tanga</b> va 10% doimiy komissiya!\n\n` +
     `👇 <i>O'yinni boshlash uchun quyidagi tugmani bosing:</i>`;
 
   const keyboard = {
@@ -136,4 +138,4 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
   }
 });
 
-console.log('🚀 Lenzy Coin Telegram Boti (Node.js) ishga tushdi...');
+console.log('🚀 Lenzy Coin Telegram Boti (@lenzycoin_bot) Node.js da ishga tushdi...');
