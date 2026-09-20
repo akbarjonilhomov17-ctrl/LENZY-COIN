@@ -65,10 +65,35 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
     loadFriends();
   }, [gameState.userId, gameState.referralCount]);
 
-  const handleCopy = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(currentLink);
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        fallbackCopy(text);
+      });
+      return;
     }
+    fallbackCopy(text);
+  };
+
+  const fallbackCopy = (text: string) => {
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.setAttribute('readonly', '');
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    } catch (e) {
+      console.warn('Fallback copy error:', e);
+    }
+  };
+
+  const handleCopy = () => {
+    copyToClipboard(currentLink);
     setCopied(true);
     soundEffects.playCritTap(gameState.soundEnabled);
     triggerHaptic(gameState.vibrationEnabled, 25);
@@ -76,9 +101,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
   };
 
   const handleCopyBaseUrl = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(baseGameUrl);
-    }
+    copyToClipboard(baseGameUrl);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2500);
   };
@@ -122,7 +145,8 @@ import os
 import telebot
 from telebot import types
 
-BOT_TOKEN = "8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY"
+# BotFather'dan olingan tokenni .env ga yoki shu yerga yozing:
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "SIZNING_BOT_TOKENINGIZ")
 GAME_URL = "${baseGameUrl}"
 BANNER_URL = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80"
 
@@ -178,18 +202,42 @@ def handle_start(message: types.Message):
 
     text = (
         f"👋 <b>Assalomu alaykum, {first_name}!</b>\\n\\n"
-        f"🪙 <b>Lenzy Coin</b> rasmiy o'yiniga xush kelibsiz!\\n\\n"
-        f"• 👆 Ekranga bosib tangalar to'plang\\n"
-        f"• ⚡ Boostlar va Avto-bot faollashtiring\\n"
-        f"• 👥 Har bir do'st uchun <b>+10,000 tanga</b> oling!\\n\\n"
-        f"👇 <i>O'yinni boshlash:</i>"
+        f"🪙 <b>Lenzy Coin</b> — Telegramdagi yangi avlod kripto-kliker va Web3 mini-o'yiniga xush kelibsiz!\\n\\n"
+        f"⚡ <b>O'yinda sizni nimalar kutmoqda:</b>\\n"
+        f"• 👆 <b>Tap qiling:</b> Ekranga bosib oltin tangalar to'plang\\n"
+        f"• 🚀 <b>Boostlar:</b> Quvvat va maksimal energiyani oshiring\\n"
+        f"• 🤖 <b>Avto-bot:</b> Passiv offline daromad oling\\n"
+        f"• 🏆 <b>Ligalar:</b> Bronzadan Lenzy Lord darajasigacha ko'tariling\\n"
+        f"• 👥 <b>Do'stlar:</b> Har bir taklif uchun <b>+10,000 tanga</b> oling!\\n\\n"
+        f"📢 <b>Rasmiy Kanal:</b> @lenzy_coin\\n\\n"
+        f"👇 <b>O'yinni boshlash uchun quyidagi tugmani bosing:</b>"
     )
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("🎮 O'yinni boshlash 🚀", web_app=types.WebAppInfo(url=direct_game_url)),
+        types.InlineKeyboardButton("🎮 O'yinni boshlash (Play) 🚀", web_app=types.WebAppInfo(url=direct_game_url)),
+        types.InlineKeyboardButton("📢 Rasmiy Kanal (@lenzy_coin)", url="https://t.me/lenzy_coin"),
         types.InlineKeyboardButton("👥 Do'stlarni taklif qilish", url=f"https://t.me/share/url?url={share_link}&text={share_msg}")
     )
     bot.send_photo(message.chat.id, BANNER_URL, caption=text, reply_markup=markup)
+
+@bot.message_handler(commands=['check'])
+def handle_check(message):
+    uid = message.from_user.id
+    def check_sub(ch):
+        try:
+            return bot.get_chat_member(ch, uid).status in ['creator', 'administrator', 'member', 'restricted']
+        except: return False
+    ch_ok = check_sub("@lenzy_coin")
+    gr_ok = check_sub("@lenzy_coin_chat")
+    txt = (
+        "🔍 <b>Obunalarni tekshirish:</b>\\n\\n"
+        f"📢 Kanal (@lenzy_coin): {'✅ A\\'zo' if ch_ok else '❌ A\\'zo emassiz'}\\n"
+        f"💬 Chat (@lenzy_coin_chat): {'✅ A\\'zo' if gr_ok else '❌ A\\'zo emassiz'}\\n\\n"
+        f"{'🎉 Hammasi tayyor! O\\'yinga kiring!' if ch_ok and gr_ok else '💡 Bonus olish uchun a\\'zo bo\\'ling!'}"
+    )
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🎮 O'yinni ochish", web_app=types.WebAppInfo(url=f"{GAME_URL}?ref=tg_{uid}")))
+    bot.send_message(message.chat.id, txt, reply_markup=markup)
 
 print("🚀 Bot ishga tushdi...")
 bot.infinity_polling()`;
@@ -197,12 +245,13 @@ bot.infinity_polling()`;
   const nodeBotCode = `/**
  * 🎮 LENZY COIN - TELEGRAM BOT (Node.js)
  * Bot: @lenzycoin_bot
- * O'rnatish: npm install node-telegram-bot-api
+ * O'rnatish: npm install node-telegram-bot-api dotenv
  * Ishga tushirish: node bot.js
  */
 const TelegramBot = require('node-telegram-bot-api');
 
-const BOT_TOKEN = '8989659664:AAFJbMaWPAFWzdQMdsXdNppUXMrKBEBEgjY';
+// BotFather'dan olingan tokenni .env ga yoki shu yerga yozing:
+const BOT_TOKEN = process.env.BOT_TOKEN || 'SIZNING_BOT_TOKENINGIZ';
 const GAME_URL = '${baseGameUrl}';
 const BANNER_URL = 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&auto=format&fit=crop&q=80';
 
@@ -216,6 +265,17 @@ bot.setChatMenuButton({
     web_app: { url: GAME_URL }
   }
 }).catch(console.warn);
+
+// Buyruqlar menyusi
+bot.setMyCommands([
+  { command: 'start', description: "🚀 O'yinni boshlash (Play)" },
+  { command: 'play', description: "🎮 O'yinni ochish" },
+  { command: 'check', description: "✅ Kanal va chat obunasini tekshirish" },
+  { command: 'channel', description: "📢 Rasmiy kanal (@lenzy_coin)" },
+  { command: 'community', description: "💬 O'yinchilar guruhi (@lenzy_coin_chat)" },
+  { command: 'ref', description: "👥 Do'stlarni taklif qilish" },
+  { command: 'help', description: "ℹ️ O'yin qo'llanmasi" }
+]).catch(console.warn);
 
 bot.onText(/\\/start(?:\\s+(.+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -236,11 +296,13 @@ bot.onText(/\\/start(?:\\s+(.+))?/, async (msg, match) => {
       \`🪙 <b>Lenzy Coin</b> — Telegramdagi eng qiziqarli kliker o'yini.\\n\\n\` +
       \`⚡ <b>Siz uchun sovg'a:</b>\\n\` +
       \`Quyidagi tugmani bosing va <b>+10,000 tanga</b> start bonusiga ega bo'ling!\\n\\n\` +
+      \`📢 <b>Rasmiy Kanal:</b> @lenzy_coin\\n\\n\` +
       \`👇 <i>O'yinga kirish uchun bosing:</i>\`;
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: "🎮 O'yinga kirish va +10,000 tanga olish 🎁", web_app: { url: refGameUrl } }]
+        [{ text: "🎮 O'yinni boshlash (+10,000 tanga) 🎁", web_app: { url: refGameUrl } }],
+        [{ text: "📢 Rasmiy Kanal (@lenzy_coin)", url: "https://t.me/lenzy_coin" }]
       ]
     };
 
@@ -253,20 +315,55 @@ bot.onText(/\\/start(?:\\s+(.+))?/, async (msg, match) => {
   const shareText = \`🪙 Lenzy Coin o'yiniga qo'shiling va +10,000 tanga oling! 👇\\n\${shareLink}\`;
 
   const text = \`👋 <b>Assalomu alaykum, \${firstName}!</b>\\n\\n\` +
-    \`🪙 <b>Lenzy Coin</b> rasmiy o'yiniga xush kelibsiz!\\n\\n\` +
-    \`• 👆 Ekranga bosib tangalar to'plang\\n\` +
-    \`• ⚡ Boostlar va Avto-bot faollashtiring\\n\` +
-    \`• 👥 Har bir do'st uchun <b>+10,000 tanga</b> oling!\\n\\n\` +
-    \`👇 <i>O'yinni boshlash:</i>\`;
+    \`🪙 <b>Lenzy Coin</b> — Telegramdagi yangi avlod kripto-kliker va Web3 mini-o'yiniga xush kelibsiz!\\n\\n\` +
+    \`⚡ <b>O'yinda sizni nimalar kutmoqda:</b>\\n\` +
+    \`• 👆 <b>Tap qiling:</b> Ekranga bosib oltin tangalar to'plang\\n\` +
+    \`• 🚀 <b>Boostlar:</b> Quvvat va maksimal energiyani oshiring\\n\` +
+    \`• 🤖 <b>Avto-bot:</b> Passiv offline daromad oling\\n\` +
+    \`• 🏆 <b>Ligalar:</b> Bronzadan Lenzy Lord darajasigacha ko'tariling\\n\` +
+    \`• 👥 <b>Do'stlar:</b> Har bir taklif uchun <b>+10,000 tanga</b> oling!\\n\\n\` +
+    \`📢 <b>Rasmiy Kanal:</b> @lenzy_coin\\n\\n\` +
+    \`👇 <b>O'yinni boshlash uchun quyidagi tugmani bosing:</b>\`;
 
   const keyboard = {
     inline_keyboard: [
-      [{ text: "🎮 O'yinni boshlash 🚀", web_app: { url: directGameUrl } }],
+      [{ text: "🎮 O'yinni boshlash (Play) 🚀", web_app: { url: directGameUrl } }],
+      [{ text: "📢 Rasmiy Kanal (@lenzy_coin)", url: "https://t.me/lenzy_coin" }],
       [{ text: "👥 Do'stlarni taklif qilish", url: \`https://t.me/share/url?url=\${encodeURIComponent(shareLink)}&text=\${encodeURIComponent(shareText)}\` }]
     ]
   };
 
   bot.sendPhoto(chatId, BANNER_URL, { caption: text, parse_mode: 'HTML', reply_markup: keyboard });
+});
+
+// /check - Kanal va chat obunasini avtomatik tekshirish
+bot.onText(/\\/check/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  async function isMember(ch) {
+    try {
+      const m = await bot.getChatMember(ch, userId);
+      return ['creator', 'administrator', 'member', 'restricted'].includes(m.status);
+    } catch { return false; }
+  }
+
+  const chSub = await isMember('@lenzy_coin');
+  const grSub = await isMember('@lenzy_coin_chat');
+
+  const text = \`🔍 <b>Obunalarni tekshirish:</b>\\n\\n\` +
+    \`📢 Kanal (@lenzy_coin): \${chSub ? '✅ A\\'zo' : '❌ A\\'zo emassiz'}\\n\` +
+    \`💬 Chat (@lenzy_coin_chat): \${grSub ? '✅ A\\'zo' : '❌ A\\'zo emassiz'}\\n\\n\` +
+    \`\${chSub && grSub ? '🎉 Barcha vazifalar bajarildi! O\\'yinga kiring va bonuslarni oling!' : '💡 Bonuslarni olish uchun kanal va chatga a\\'zo bo\\'ling!'}\`;
+
+  bot.sendMessage(chatId, text, {
+    parse_mode: 'HTML',
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🎮 O'yinga kirish", web_app: { url: \`\${GAME_URL}?ref=tg_\${userId}\` } }]
+      ]
+    }
+  });
 });
 
 console.log("🚀 Node.js Telegram Bot (@lenzycoin_bot) ishga tushdi...");`;

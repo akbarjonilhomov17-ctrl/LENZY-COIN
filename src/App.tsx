@@ -354,6 +354,11 @@ export default function App() {
             gameState={gameState}
             onClaimTask={handleClaimTask}
             onUpdateTask={handleUpdateTask}
+            onNavigateTab={(tab) => {
+              flushSync();
+              setActiveTab(tab);
+            }}
+            onOpenDailyBonus={() => setIsDailyBonusOpen(true)}
           />
         )}
 
@@ -397,6 +402,7 @@ export default function App() {
           onClose={() => setIsProfileOpen(false)}
           gameState={gameState}
           onUpdateState={handleUpdateProfileState}
+          onOpenAdmin={() => setIsAdminModalOpen(true)}
         />
 
         <AdminModal

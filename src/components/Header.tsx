@@ -90,9 +90,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Quick Actions: Admin Panel Button (Admin only), Daily Bonus, Sound, Vibration */}
+        {/* Quick Actions: Admin Panel Button (Strictly Admin only), Daily Bonus, Sound, Vibration */}
         <div className="flex items-center gap-1.5">
-          {/* Admin Panel button - Strictly visible to verified admin usernames only */}
+          {/* Admin Panel button - Visible ONLY to verified admin usernames */}
           {isAdmin && (
             <button
               id="header-admin-btn"

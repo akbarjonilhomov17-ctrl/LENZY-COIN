@@ -1,8 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUser(data) {
+      return (!('userId' in data) || (data.userId is string && data.userId.size() <= 64))
+        && (!('username' in data) || data.username == null || (data.username is string && data.username.size() <= 64))
+        && (!('firstName' in data) || data.firstName == null || (data.firstName is string && data.firstName.size() <= 100))
+        && (!('lastName' in data) || data.lastName == null || (data.lastName is string && data.lastName.size() <= 100))
+        && (!('coins' in data) || (data.coins is number && data.coins >= 0))
+        && (!('totalEarnedCoins' in data) || (data.totalEarnedCoins is number && data.totalEarnedCoins >= 0))
+        && (!('referralCount' in data) || (data.referralCount is number && data.referralCount >= 0));
+    }
+
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, update: if isValidId(userId) && isValidUser(request.resource.data);
+      allow delete: if true;
     }
   }
 }

@@ -10,12 +10,14 @@ interface ProfileModalProps {
   onClose: () => void;
   gameState: UserGameState;
   onUpdateState: (updates: Partial<UserGameState>) => void;
+  onOpenAdmin?: () => void;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
   gameState,
+  onOpenAdmin,
 }) => {
   if (!isOpen) return null;
 
@@ -158,13 +160,29 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
 
         {/* Action Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full py-2.5 rounded-xl font-extrabold text-xs shadow-lg bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 shadow-amber-500/20 active:scale-95 transition-all"
-        >
-          Tushunarli
-        </button>
+        <div className="flex gap-2">
+          {onOpenAdmin && isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenAdmin();
+              }}
+              className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Admin Panel</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className={`${onOpenAdmin && isAdmin ? 'flex-1' : 'w-full'} py-2.5 rounded-xl font-extrabold text-xs shadow-lg bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 shadow-amber-500/20 active:scale-95 transition-all`}
+          >
+            Tushunarli
+          </button>
+        </div>
       </div>
     </div>
   );

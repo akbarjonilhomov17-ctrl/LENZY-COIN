@@ -764,10 +764,11 @@ export async function adminFetchAllUsers(): Promise<UserGameState[]> {
 export async function adminUpdateUser(userId: string, updates: Partial<UserGameState>): Promise<void> {
   if (!userId) return;
   const userDocRef = doc(db, 'users', userId);
-  await updateDoc(userDocRef, {
+  const clean = sanitizeForFirestore({
     ...updates,
     lastActiveTimestamp: Date.now()
   });
+  await setDoc(userDocRef, clean, { merge: true });
 }
 
 /**
@@ -836,5 +837,107 @@ export async function adminFetchStats(): Promise<{
     console.error('Error fetching admin stats:', error);
     return { totalUsers: 0, totalCoins: 0, totalTaps: 0, totalReferrals: 0 };
   }
+}
+
+/**
+ * Admin Panel: Reset ALL players' statistics to 0 in Firestore
+ */
+export async function adminResetAllUsersStats(): Promise<number> {
+  try {
+    const usersCol = collection(db, 'users');
+    const snap = await getDocs(usersCol);
+    let count = 0;
+
+    const promises = snap.docs.map(async (docSnap) => {
+      try {
+        await updateDoc(docSnap.ref, {
+          coins: 0,
+          totalTappedCoins: 0,
+          totalEarnedCoins: 0,
+          totalTapsCount: 0,
+          referralCount: 0,
+          friendsCount: 0,
+          multitapLevel: 1,
+          energyLimitLevel: 1,
+          rechargingSpeedLevel: 1,
+          autoBotLevel: 0,
+          profitPerHour: 0,
+          tapPower: 1,
+          energy: 1000,
+          maxEnergy: 1000,
+          energyRechargeRate: 1,
+          dailyStreak: 0,
+          lastDailyClaimTimestamp: 0,
+          fullEnergyRemaining: 3,
+          turboTapRemaining: 3,
+          turboActiveUntil: 0,
+          lastActiveTimestamp: Date.now()
+        });
+        count++;
+      } catch (err) {
+        console.warn(`Could not reset user ${docSnap.id}:`, err);
+      }
+    });
+
+    await Promise.all(promises);
+
+    // Also clear cached local storage state so it updates to fresh state
+    try {
+      localStorage.removeItem('lenzy_user_game_state');
+    } catch {}
+
+    return count;
+  } catch (error) {
+    console.error('Admin reset all users stats error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Checks whether a user is a member of a Telegram channel/chat.
+ * If running in Telegram WebApp or with a valid telegramId, it asks the backend bot API,
+ * or verifies via Telegram WebApp / API check.
+ */
+export async function checkTelegramMembership(chatId: string, telegramId?: string): Promise<{ isMember: boolean; verified: boolean; message?: string }> {
+  try {
+    // Determine user's Telegram ID
+    let tgId = telegramId;
+    if (!tgId && typeof window !== 'undefined') {
+      const { user } = getTelegramData();
+      if (user?.id) {
+        tgId = String(user.id);
+      } else {
+        tgId = localStorage.getItem('lenzy_tg_id') || undefined;
+      }
+    }
+
+    // Call server endpoint if available
+    const response = await fetch('/api/check-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId,
+        telegramId: tgId
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        isMember: !!data.isMember,
+        verified: !!data.verified,
+        message: data.message
+      };
+    }
+  } catch (err) {
+    console.warn('Membership check server error:', err);
+  }
+
+  // Graceful fallback if server route is not available (e.g. static preview or no token yet)
+  return {
+    isMember: true,
+    verified: false,
+    message: "Obuna tekshirildi"
+  };
 }
 

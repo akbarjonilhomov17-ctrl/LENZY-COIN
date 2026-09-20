@@ -1,25 +1,48 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Clock, Send, MessageSquare, Twitter, CalendarCheck, Flame, UserPlus, Users, Award, Crown, Sparkles, ArrowUpRight, Check, Loader2 } from 'lucide-react';
+import { CheckCircle2, Clock, Send, MessageSquare, Twitter, CalendarCheck, Flame, UserPlus, Users, Award, Crown, Sparkles, ArrowUpRight, Check, Loader2, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { TaskItem, UserGameState } from '../types';
 import { formatNumberWithCommas, formatCoins } from '../utils/storage';
 import { soundEffects, triggerHaptic } from '../utils/audio';
+import { checkTelegramMembership } from '../services/userService';
 
 interface TasksViewProps {
   tasks: TaskItem[];
   gameState: UserGameState;
   onClaimTask: (taskId: string, rewardCoins: number, rewardEnergy?: number) => void;
   onUpdateTask: (taskId: string, updates: Partial<TaskItem>) => void;
+  onNavigateTab?: (tab: 'tap' | 'boosts' | 'tasks' | 'friends' | 'leaderboard') => void;
+  onOpenDailyBonus?: () => void;
 }
 
 export const TasksView: React.FC<TasksViewProps> = ({
   tasks,
   gameState,
   onClaimTask,
-  onUpdateTask
+  onUpdateTask,
+  onNavigateTab,
+  onOpenDailyBonus
 }) => {
   const [activeTab, setActiveTab] = useState<'social' | 'daily' | 'achievements'>('social');
   const [checkingTaskId, setCheckingTaskId] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<{ id: string; text: string; isError?: boolean } | null>(null);
+
+  const openExternalLink = (url: string) => {
+    try {
+      const tg = typeof window !== 'undefined' ? (window as unknown as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void; openLink?: (u: string) => void } } })?.Telegram?.WebApp : undefined;
+      if (tg) {
+        if ((url.startsWith('https://t.me/') || url.startsWith('tg://')) && tg.openTelegramLink) {
+          tg.openTelegramLink(url);
+          return;
+        }
+        if (tg.openLink) {
+          tg.openLink(url);
+          return;
+        }
+      }
+    } catch {}
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   // Filter tasks based on category
   const filteredTasks = tasks.filter(t => t.category === activeTab);
@@ -70,25 +93,83 @@ export const TasksView: React.FC<TasksViewProps> = ({
     return { isReadyToClaim: false };
   };
 
-  const handleStartTask = (task: TaskItem) => {
-    if (task.actionUrl) {
-      window.open(task.actionUrl, '_blank');
+  const handleStartTask = async (task: TaskItem) => {
+    if (task.type === 'daily_claim') {
+      if (onOpenDailyBonus) {
+        onOpenDailyBonus();
+        return;
+      }
     }
 
-    // Trigger checking simulation for social tasks
+    if (task.type === 'invite') {
+      if (onNavigateTab) {
+        onNavigateTab('friends');
+        return;
+      }
+    }
+
+    if (task.type === 'tap_count' || task.type === 'level_reach') {
+      if (onNavigateTab) {
+        onNavigateTab('tap');
+        return;
+      }
+    }
+
+    // Open channel / group link
+    if (task.actionUrl) {
+      openExternalLink(task.actionUrl);
+    }
+
+    // If it's a telegram channel or chat task, initiate automatic check
     setCheckingTaskId(task.id);
+    setFeedbackMessage(null);
     soundEffects.playTap(gameState.soundEnabled);
 
+    // If task has targetChatId (like @lenzy_coin or @lenzy_coin_chat), verify subscription
+    if (task.targetChatId) {
+      try {
+        const result = await checkTelegramMembership(task.targetChatId, gameState.telegramId);
+
+        if (result.isMember) {
+          // Automatic success!
+          setTimeout(() => {
+            onUpdateTask(task.id, { isCompleted: true });
+            setCheckingTaskId(null);
+            setFeedbackMessage({ id: task.id, text: "✅ Obuna tasdiqlandi! Mukofotni oling.", isError: false });
+            soundEffects.playCritTap(gameState.soundEnabled);
+            triggerHaptic(gameState.vibrationEnabled, 25);
+          }, 1500);
+        } else {
+          // Not subscribed yet
+          setTimeout(() => {
+            setCheckingTaskId(null);
+            setFeedbackMessage({ 
+              id: task.id, 
+              text: "⚠️ Siz hali a'zo bo'lmadingiz! Iltimos, kanal/chatga a'zo bo'ling va qayta bosing.", 
+              isError: true 
+            });
+            triggerHaptic(gameState.vibrationEnabled, 15);
+          }, 1500);
+        }
+        return;
+      } catch (err) {
+        console.warn('Membership check fallback:', err);
+      }
+    }
+
+    // Standard social task simulation fallback
     setTimeout(() => {
       onUpdateTask(task.id, { isCompleted: true });
       setCheckingTaskId(null);
+      setFeedbackMessage({ id: task.id, text: "✅ Vazifa bajarildi!", isError: false });
       soundEffects.playCritTap(gameState.soundEnabled);
       triggerHaptic(gameState.vibrationEnabled, 20);
-    }, 2800);
+    }, 2000);
   };
 
   const handleClaim = (task: TaskItem) => {
     onClaimTask(task.id, task.rewardCoins, task.rewardEnergy);
+    setFeedbackMessage(null);
     soundEffects.playClaim(gameState.soundEnabled);
     triggerHaptic(gameState.vibrationEnabled, 30);
     confetti({
@@ -233,7 +314,15 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       onClick={() => handleStartTask(task)}
                       className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 border border-slate-700 text-amber-300 text-xs font-bold flex items-center gap-1 active:scale-95 transition-all"
                     >
-                      <span>Bajarish</span>
+                      <span>
+                        {task.type === 'daily_claim'
+                          ? 'Bonus olish'
+                          : task.type === 'invite'
+                          ? 'Taklif qilish'
+                          : task.type === 'tap_count' || task.type === 'level_reach'
+                          ? "O'ynash"
+                          : 'Bajarish'}
+                      </span>
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -253,6 +342,20 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       style={{ width: `${percent || 0}%` }}
                     ></div>
                   </div>
+                </div>
+              )}
+
+              {/* Telegram Auto-Verification Feedback Alert */}
+              {feedbackMessage && feedbackMessage.id === task.id && (
+                <div className={`mt-2.5 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] font-medium ${
+                  feedbackMessage.isError ? 'text-rose-400' : 'text-emerald-400'
+                }`}>
+                  {feedbackMessage.isError ? (
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                  )}
+                  <span>{feedbackMessage.text}</span>
                 </div>
               )}
             </div>

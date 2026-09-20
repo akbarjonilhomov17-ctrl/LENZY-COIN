@@ -11,14 +11,11 @@ import {
   Edit3, 
   Gift, 
   RefreshCw, 
-  Check, 
   CheckCircle2, 
-  AlertCircle,
-  Crown,
-  UserCheck,
-  TrendingUp,
-  Sliders,
-  Plus
+  Crown, 
+  TrendingUp, 
+  Sliders, 
+  RotateCcw
 } from 'lucide-react';
 import { UserGameState } from '../types';
 import { 
@@ -26,9 +23,9 @@ import {
   adminUpdateUser, 
   adminDeleteUser, 
   adminBonusToAllUsers,
+  adminResetAllUsersStats,
   adminFetchStats,
   isAdminUser,
-  ADMIN_USERNAMES,
   getRandomAvatarBg
 } from '../services/userService';
 import { formatNumberWithCommas, formatCoins } from '../utils/storage';
@@ -47,6 +44,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   currentUserState,
   onUpdateCurrentUser
 }) => {
+  // Data states
   const [users, setUsers] = useState<UserGameState[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,9 +59,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [editReferrals, setEditReferrals] = useState('');
   const [editUsername, setEditUsername] = useState('');
 
-  // Bulk bonus state
+  // Bulk action states
   const [bulkBonusAmount, setBulkBonusAmount] = useState('50000');
   const [isSendingBonus, setIsSendingBonus] = useState(false);
+  const [isResettingAll, setIsResettingAll] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -83,18 +82,18 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isAdminUser(currentUserState.username)) {
       loadData();
     }
-  }, [isOpen]);
+  }, [isOpen, currentUserState.username]);
 
   const showNotification = (msg: string) => {
     setActionSuccessMsg(msg);
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
-  // Give instant boost to current admin user
-  const handleBoostCurrentAdmin = (coins: number, tapPower: number, maxEnergy: number) => {
+  // Give instant boost to current admin user (saves to cloud instantly)
+  const handleBoostCurrentAdmin = async (coins: number, tapPower: number, maxEnergy: number) => {
     const updated = {
       coins: (currentUserState.coins || 0) + coins,
       totalEarnedCoins: (currentUserState.totalEarnedCoins || 0) + coins,
@@ -103,9 +102,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       energy: Math.max(currentUserState.energy, maxEnergy),
     };
     onUpdateCurrentUser(updated);
+    if (currentUserState.userId) {
+      try {
+        await adminUpdateUser(currentUserState.userId, updated);
+      } catch (err) {
+        console.error('Failed to sync admin boost to Firestore:', err);
+      }
+    }
     soundEffects.playUpgrade(currentUserState.soundEnabled);
     triggerHaptic(currentUserState.vibrationEnabled, 30);
     showNotification(`Admin hisobiga +${formatCoins(coins)} tanga va quvvat berildi!`);
+    loadData();
   };
 
   // Give bonus to ALL users
@@ -120,7 +127,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       triggerHaptic(currentUserState.vibrationEnabled, 35);
       showNotification(`Barcha ${count} ta o'yinchiga +${formatNumberWithCommas(amt)} tanga yuborildi!`);
       
-      // Update local state for current user if part of all users
+      // Update local state for current user
       onUpdateCurrentUser({
         coins: currentUserState.coins + amt,
         totalEarnedCoins: currentUserState.totalEarnedCoins + amt
@@ -129,8 +136,52 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       await loadData();
     } catch (err) {
       console.error('Error sending bonus to all:', err);
+      showNotification('Bonus tarqatishda xatolik yuz berdi.');
     } finally {
       setIsSendingBonus(false);
+    }
+  };
+
+  // Reset ALL players statistics to 0
+  const handleResetAllStats = async () => {
+    const confirmed = window.confirm(
+      "⚠️ DIQQAT! Barcha o'yinchilarning statistikasi (tangalar, taplar, darajalar, referallar) 0 ga tushirilsinmi?\n\nBu amal bazadagi barcha foydalanuvchilarni 0 qiladi!"
+    );
+    if (!confirmed) return;
+
+    setIsResettingAll(true);
+    try {
+      const resetCount = await adminResetAllUsersStats();
+      showNotification(`Barcha ${resetCount} ta o'yinchilar statistikasi 0 ga tushirildi!`);
+      soundEffects.playCritTap(currentUserState.soundEnabled);
+      triggerHaptic(currentUserState.vibrationEnabled, 50);
+
+      // Reset current user state live
+      onUpdateCurrentUser({
+        coins: 0,
+        totalTappedCoins: 0,
+        totalEarnedCoins: 0,
+        totalTapsCount: 0,
+        referralCount: 0,
+        friendsCount: 0,
+        multitapLevel: 1,
+        energyLimitLevel: 1,
+        rechargingSpeedLevel: 1,
+        autoBotLevel: 0,
+        profitPerHour: 0,
+        tapPower: 1,
+        energy: 1000,
+        maxEnergy: 1000,
+        dailyStreak: 0,
+        lastDailyClaimTimestamp: 0
+      });
+
+      await loadData();
+    } catch (err) {
+      console.error('Error resetting all stats:', err);
+      alert('Statistikalarni 0 ga tushirishda xatolik yuz berdi.');
+    } finally {
+      setIsResettingAll(false);
     }
   };
 
@@ -157,6 +208,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
     const updates: Partial<UserGameState> = {
       coins: coinsVal,
+      totalEarnedCoins: Math.max(editingUser.totalEarnedCoins || 0, coinsVal),
       tapPower: tapPowerVal,
       energy: energyVal,
       maxEnergy: maxEnergyVal,
@@ -178,6 +230,47 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       await loadData();
     } catch (err) {
       console.error('Error saving user edit:', err);
+      showNotification("Tahrirlashda xatolik yuz berdi!");
+    }
+  };
+
+  // Reset Single User Stats to 0
+  const handleResetSingleUser = async (user: UserGameState) => {
+    const confirmed = window.confirm(
+      `@${user.username || user.userId} foydalanuvchisining barcha tanga, tap va referallari 0 ga tushirilsinmi?`
+    );
+    if (!confirmed) return;
+
+    const zeroState: Partial<UserGameState> = {
+      coins: 0,
+      totalTappedCoins: 0,
+      totalEarnedCoins: 0,
+      totalTapsCount: 0,
+      referralCount: 0,
+      friendsCount: 0,
+      multitapLevel: 1,
+      energyLimitLevel: 1,
+      rechargingSpeedLevel: 1,
+      autoBotLevel: 0,
+      profitPerHour: 0,
+      tapPower: 1,
+      energy: 1000,
+      maxEnergy: 1000,
+      dailyStreak: 0,
+      lastDailyClaimTimestamp: 0
+    };
+
+    try {
+      await adminUpdateUser(user.userId, zeroState);
+      if (user.userId === currentUserState.userId) {
+        onUpdateCurrentUser(zeroState);
+      }
+      showNotification(`@${user.username || user.userId} statistikasi 0 qilindi!`);
+      soundEffects.playCritTap(currentUserState.soundEnabled);
+      await loadData();
+    } catch (err) {
+      console.error('Error resetting single user:', err);
+      showNotification('Xatolik yuz berdi!');
     }
   };
 
@@ -194,9 +287,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       await loadData();
     } catch (err) {
       console.error('Error deleting user:', err);
+      showNotification("Foydalanuvchini o'chirishda xatolik yuz berdi.");
     }
   };
 
+  // Strictly visible ONLY to verified admin users (lenzy_dev and lenzy_admin)
   if (!isOpen || !isAdminUser(currentUserState.username)) return null;
 
   const filteredUsers = users.filter(u => {
@@ -234,6 +329,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           <button
             onClick={onClose}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+            title="Yopish"
           >
             <X className="w-5 h-5" />
           </button>
@@ -241,7 +337,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
         {/* Action Notification Toast */}
         {actionSuccessMsg && (
-          <div className="bg-emerald-500/20 border-y border-emerald-500/40 px-4 py-2 text-xs text-emerald-300 font-bold flex items-center gap-2">
+          <div className="bg-emerald-500/20 border-y border-emerald-500/40 px-4 py-2 text-xs text-emerald-300 font-bold flex items-center gap-2 animate-in fade-in">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
             <span>{actionSuccessMsg}</span>
           </div>
@@ -357,6 +453,34 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             </div>
           </div>
 
+          {/* Danger Zone: Reset All Players Statistics */}
+          <div className="bg-rose-950/30 border border-rose-800/40 rounded-2xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                <span className="text-xs font-bold text-rose-200">Hammani statistikasini 0 qilish</span>
+              </div>
+              <span className="text-[10px] text-rose-400 font-bold bg-rose-900/40 border border-rose-700/50 px-2 py-0.5 rounded-full">
+                Danger Zone
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-2.5">
+              Barcha o&apos;yinchilarning tangalari, taplari, referallari va darajalarini 0 ga tushiradi (profil o&apos;chirilmaydi).
+            </p>
+            <button
+              onClick={handleResetAllStats}
+              disabled={isResettingAll}
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow active:scale-98 transition-all disabled:opacity-50"
+            >
+              {isResettingAll ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              <span>Barcha O&apos;yinchilar Statistikasini 0 Qilish</span>
+            </button>
+          </div>
+
           {/* Registered Players List & Controls */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
@@ -369,10 +493,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               <button
                 onClick={loadData}
                 disabled={loading}
-                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-amber-400 transition-colors"
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-amber-400 transition-colors flex items-center gap-1 text-xs"
                 title="Yangilash"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-400' : ''}`} />
+                <span>Yangilash</span>
               </button>
             </div>
 
@@ -457,6 +582,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                         {/* Action buttons */}
                         <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Edit user button */}
                           <button
                             onClick={() => handleStartEditUser(user)}
                             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700"
@@ -464,12 +590,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* Quick 0 qilish button */}
+                          <button
+                            onClick={() => handleResetSingleUser(user)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-950/40 text-amber-400 border border-slate-700 hover:border-amber-500/40"
+                            title="Statistikasini 0 ga tushirish"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
                           
+                          {/* Delete button */}
                           {!isCurrent && (
                             <button
                               onClick={() => handleDeleteUser(user)}
                               className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-800/40"
-                              title="O'chirish"
+                              title="Bazadan butunlay o'chirish"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -518,7 +654,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       {/* Sub-modal: Edit User Details */}
       {editingUser && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-sm p-4 space-y-3 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
@@ -623,6 +759,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 className="px-2 py-1 bg-slate-800 text-[10px] text-amber-300 rounded-lg font-bold hover:bg-slate-700"
               >
                 +10M
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditCoins('0')}
+                className="px-2 py-1 bg-rose-950/40 text-[10px] text-rose-300 border border-rose-800/40 rounded-lg font-bold hover:bg-rose-900/60 ml-auto"
+              >
+                0 qilish
               </button>
             </div>
 

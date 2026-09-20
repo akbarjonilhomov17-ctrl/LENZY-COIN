@@ -4,5 +4,18 @@ dist/
 coverage/
 .DS_Store
 *.log
+
+# Sensitive environment variables and secrets (NEVER commit to Git)
+.env
 .env*
+*.env
 !.env.example
+*.pem
+*.key
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/

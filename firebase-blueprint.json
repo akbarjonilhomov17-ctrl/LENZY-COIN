@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User game state and profile for Lenzy Coin",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 64 },
+        "telegramId": { "type": "string", "maxLength": 64 },
+        "username": { "type": "string", "maxLength": 64 },
+        "firstName": { "type": "string", "maxLength": 100 },
+        "lastName": { "type": "string", "maxLength": 100 },
+        "photoUrl": { "type": "string", "maxLength": 2048 },
+        "coins": { "type": "number" },
+        "totalEarnedCoins": { "type": "number" },
+        "referralCount": { "type": "number" },
+        "friendsCount": { "type": "number" },
+        "lastActiveTimestamp": { "type": "number" }
+      },
+      "required": ["userId", "coins", "totalEarnedCoins"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of game player profiles and stats"
+    }
+  }
+}

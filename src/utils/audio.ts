@@ -179,8 +179,21 @@ export const soundEffects = {
 };
 
 export const triggerHaptic = (enabled: boolean = true, duration: number = 15) => {
-  if (!enabled || typeof navigator === 'undefined' || !navigator.vibrate) return;
+  if (!enabled) return;
   try {
-    navigator.vibrate(duration);
+    const tg = typeof window !== 'undefined' ? (window as unknown as { Telegram?: { WebApp?: { HapticFeedback?: { impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void; notificationOccurred: (type: 'error' | 'success' | 'warning') => void } } } })?.Telegram?.WebApp : undefined;
+    if (tg?.HapticFeedback) {
+      if (duration <= 15) {
+        tg.HapticFeedback.impactOccurred('light');
+      } else if (duration <= 35) {
+        tg.HapticFeedback.impactOccurred('medium');
+      } else {
+        tg.HapticFeedback.impactOccurred('heavy');
+      }
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(duration);
+    }
   } catch {}
 };

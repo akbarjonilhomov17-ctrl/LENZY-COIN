@@ -47,6 +47,7 @@ export interface TaskItem {
   actionUrl?: string;
   iconName: string;
   type: 'telegram' | 'social' | 'invite' | 'tap_count' | 'level_reach' | 'daily_claim';
+  targetChatId?: string; // e.g. '@lenzy_coin' or '@lenzy_coin_chat' for automatic subscription check
   requiredCount?: number;
   currentCount?: number;
 }

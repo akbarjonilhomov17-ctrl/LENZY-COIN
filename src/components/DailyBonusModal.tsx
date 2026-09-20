@@ -32,7 +32,9 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
   const isClaimedToday = lastClaimDate === todayDate;
 
   // Calculate current target day (1 to 7)
-  const currentDayIndex = isClaimedToday ? dailyStreak : (dailyStreak % 7) + 1;
+  const currentDayIndex = isClaimedToday 
+    ? (dailyStreak > 0 ? ((dailyStreak - 1) % 7) + 1 : 1) 
+    : ((dailyStreak % 7) + 1);
   const todayReward = DAILY_BONUSES[currentDayIndex - 1] || DAILY_BONUSES[0];
 
   const handleClaim = () => {

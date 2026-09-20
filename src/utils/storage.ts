@@ -119,10 +119,19 @@ export function loadTasks(): TaskItem[] {
     if (!raw) return INITIAL_TASKS;
     const saved: TaskItem[] = JSON.parse(raw);
     
-    // Merge with INITIAL_TASKS in case new tasks are added
+    // Merge with INITIAL_TASKS in case tasks are updated or removed
     return INITIAL_TASKS.map(task => {
       const found = saved.find(s => s.id === task.id);
-      return found ? { ...task, ...found } : task;
+      if (found) {
+        return {
+          ...task,
+          targetChatId: task.targetChatId,
+          isCompleted: found.isCompleted,
+          isClaimed: found.isClaimed,
+          currentCount: found.currentCount ?? task.currentCount
+        };
+      }
+      return task;
     });
   } catch {
     return INITIAL_TASKS;
